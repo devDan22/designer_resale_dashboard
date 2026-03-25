@@ -1,0 +1,93 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         String   // ADMIN | MANAGER | BUYER | SELLER
+  managerType  String?  // BUYING | SELLING | BOTH — only set when role = MANAGER
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  boughtBags     Bag[]          @relation("BuyerBags")
+  sellingBags    Bag[]          @relation("SellerBags")
+  stageHistory   BagStageHistory[]
+}
+
+model Bag {
+  id             Int      @id @default(autoincrement())
+  brand          String
+  model          String
+  color          String
+  size           String?
+  condition      String   // NEW | EXCELLENT | GOOD | FAIR
+  serialNumber   String?  @unique
+
+  purchasePrice  Float
+  purchaseDate   DateTime
+  sourceName     String
+  buyerId        Int?
+  buyer          User?    @relation("BuyerBags", fields: [buyerId], references: [id])
+
+  authStatus     Boolean  @default(false)
+  authNotes      String?
+
+  listingPrice   Float?
+  platform       String?
+  sellerId       Int?
+  seller         User?    @relation("SellerBags", fields: [sellerId], references: [id])
+
+  salePrice      Float?
+  saleDate       DateTime?
+  buyerName      String?
+
+  stage            String   @default("PURCHASED") // PURCHASED | AUTHENTICATED | LISTED | SOLD
+  notes            String?
+  shopifyProductId String?  // Shopify GID e.g. "gid://shopify/Product/123"
+  shopifyProductUrl String? // e.g. https://yourstore.myshopify.com/products/chanel-classic-flap
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  photos         Photo[]
+  stageHistory   BagStageHistory[]
+
+  @@index([stage])
+  @@index([brand])
+  @@index([buyerId])
+  @@index([sellerId])
+}
+
+model Photo {
+  id        Int      @id @default(autoincrement())
+  bagId     Int
+  bag       Bag      @relation(fields: [bagId], references: [id], onDelete: Cascade)
+  filename  String
+  url       String
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([bagId])
+}
+
+model BagStageHistory {
+  id          Int      @id @default(autoincrement())
+  bagId       Int
+  bag         Bag      @relation(fields: [bagId], references: [id], onDelete: Cascade)
+  fromStage   String?
+  toStage     String
+  changedById Int
+  changedBy   User     @relation(fields: [changedById], references: [id])
+  notes       String?
+  changedAt   DateTime @default(now())
+
+  @@index([bagId])
+}

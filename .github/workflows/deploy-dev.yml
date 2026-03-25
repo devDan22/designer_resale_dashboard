@@ -1,0 +1,121 @@
+name: Deploy — Dev
+
+on:
+  push:
+    branches: [dev]
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: true   # dev deploys can be superseded
+
+jobs:
+  # ── 1. Typecheck ─────────────────────────────────────────────────────────
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Check backend
+        working-directory: backend
+        run: npm ci && npx prisma generate && npx tsc --noEmit
+
+      - name: Check frontend
+        working-directory: frontend
+        run: npm ci && npx tsc --noEmit
+
+  # ── 2. Deploy frontend ────────────────────────────────────────────────────
+  deploy-frontend:
+    name: Frontend → S3/CloudFront (dev)
+    needs: typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+        env:
+          VITE_API_BASE_URL: ${{ secrets.DEV_API_URL }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Sync to S3
+        working-directory: frontend
+        run: |
+          aws s3 sync dist/ s3://${{ secrets.DEV_S3_BUCKET }} \
+            --delete \
+            --cache-control "public,max-age=31536000,immutable" \
+            --exclude "index.html"
+          aws s3 cp dist/index.html s3://${{ secrets.DEV_S3_BUCKET }}/index.html \
+            --cache-control "no-cache,no-store,must-revalidate"
+
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.DEV_CLOUDFRONT_ID }} \
+            --paths "/index.html"
+
+  # ── 3. Deploy backend ─────────────────────────────────────────────────────
+  deploy-backend:
+    name: Backend → EC2 (dev)
+    needs: typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEV_EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.DEV_EC2_SSH_KEY }}
+          script: |
+            set -e
+
+            cd /app/resale-dashboard-dev
+
+            echo "→ Pulling latest code"
+            git fetch origin dev
+            git reset --hard origin/dev
+
+            echo "→ Installing backend dependencies"
+            cd backend
+            npm ci --omit=dev
+
+            echo "→ Generating Prisma client"
+            npx prisma generate
+
+            echo "→ Running database migrations"
+            npx prisma migrate deploy
+
+            echo "→ Building TypeScript"
+            npm run build
+
+            echo "→ Restarting backend"
+            pm2 restart resale-backend-dev || \
+              pm2 start ecosystem.config.cjs --only resale-backend-dev
+            pm2 save
+
+            echo "→ Done. Dev backend restarted."
