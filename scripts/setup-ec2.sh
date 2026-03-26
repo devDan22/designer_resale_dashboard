@@ -10,8 +10,8 @@
 set -euo pipefail
 
 ENV=${1:-prod}
-APP_DIR="/app/resale-dashboard${ENV == 'dev' ? '-dev' : ''}"
-REPO_URL="git@github.com:YOUR_ORG/YOUR_REPO.git"   # ← update this
+if [ "$ENV" = "dev" ]; then APP_DIR="/app/resale-dashboard-dev"; else APP_DIR="/app/resale-dashboard"; fi
+REPO_URL="https://<YOUR_GITHUB_TOKEN>@github.com/devDan22/designer_resale_dashboard.git"
 BRANCH="main"
 if [ "$ENV" = "dev" ]; then BRANCH="dev"; fi
 
@@ -30,15 +30,16 @@ nvm use 20
 nvm alias default 20
 
 # Make node/npm/pm2 available system-wide
-NODE_PATH=$(nvm which current)
+NODE_PATH=$(which node)
+NODE_BIN_DIR=$(dirname "$NODE_PATH")
 ln -sf "$NODE_PATH" /usr/local/bin/node
-ln -sf "$(dirname $NODE_PATH)/npm" /usr/local/bin/npm
-ln -sf "$(dirname $NODE_PATH)/npx" /usr/local/bin/npx
+ln -sf "$NODE_BIN_DIR/npm" /usr/local/bin/npm
+ln -sf "$NODE_BIN_DIR/npx" /usr/local/bin/npx
 
 # ── PM2 ─────────────────────────────────────────────────────────────────────
 npm install -g pm2
 ln -sf "$(which pm2)" /usr/local/bin/pm2
-pm2 startup systemd -u root --hp /root | tail -1 | bash
+pm2 startup systemd -u root --hp /root | tail -1 | sed 's/^\$ //' | bash
 
 # ── Clone repo ───────────────────────────────────────────────────────────────
 mkdir -p /app
