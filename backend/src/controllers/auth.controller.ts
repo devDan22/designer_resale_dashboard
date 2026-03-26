@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { loginUser } from '../services/auth.service';
+import { loginUser, registerUser } from '../services/auth.service';
 
 export const login = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -17,4 +17,26 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
 
 export const me = (req: Request, res: Response): void => {
   res.json({ user: req.user });
+};
+
+export const register = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { name, email, password, role } = req.body;
+    if (!name || !email || !password || !role) {
+      res.status(400).json({ message: 'Name, email, password and role are required' });
+      return;
+    }
+    if (!['BUYER', 'SELLER'].includes(role)) {
+      res.status(400).json({ message: 'Role must be BUYER or SELLER' });
+      return;
+    }
+    const result = await registerUser(name, email, password, role);
+    res.status(201).json(result);
+  } catch (err: any) {
+    if (err.message === 'Email already in use') {
+      res.status(409).json({ message: err.message });
+      return;
+    }
+    next(err);
+  }
 };
