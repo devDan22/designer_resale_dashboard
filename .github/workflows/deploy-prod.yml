@@ -94,30 +94,30 @@ jobs:
             set -e
             export PATH="/usr/local/bin:$PATH"
 
-            git config --global --add safe.directory /app/resale-dashboard
+            sudo git config --global --add safe.directory /app/resale-dashboard
 
             cd /app/resale-dashboard
 
             echo "→ Pulling latest code"
-            git fetch origin main
-            git reset --hard origin/main
+            sudo git fetch origin main
+            sudo git reset --hard origin/main
 
             echo "→ Installing backend dependencies"
             cd backend
-            npm ci
+            sudo npm ci
 
             echo "→ Generating Prisma client"
-            npx prisma generate
+            sudo npx prisma generate
 
             echo "→ Running database migrations"
-            npx prisma migrate deploy
+            sudo npx prisma migrate deploy
 
             echo "→ Building TypeScript"
-            npm run build
+            sudo npm run build
 
             echo "→ Restarting backend"
-            pm2 restart resale-backend-prod --update-env || \
-              pm2 start ecosystem.config.cjs --only resale-backend-prod
-            pm2 save
+            sudo pm2 restart resale-backend-prod --update-env || \
+              sudo pm2 start ecosystem.config.cjs --only resale-backend-prod
+            sudo pm2 save
 
             echo "→ Done. Backend restarted."
