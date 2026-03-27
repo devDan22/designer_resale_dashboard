@@ -94,6 +94,9 @@ jobs:
           key: ${{ secrets.PROD_EC2_SSH_KEY }}
           script: |
             set -e
+            export PATH="/usr/local/bin:$PATH"
+
+            git config --global --add safe.directory /app/resale-dashboard
 
             cd /app/resale-dashboard
 
@@ -103,7 +106,7 @@ jobs:
 
             echo "→ Installing backend dependencies"
             cd backend
-            npm ci --omit=dev
+            npm ci
 
             echo "→ Generating Prisma client"
             npx prisma generate
@@ -115,7 +118,7 @@ jobs:
             npm run build
 
             echo "→ Restarting backend"
-            pm2 restart resale-backend-prod || \
+            pm2 restart resale-backend-prod --update-env || \
               pm2 start ecosystem.config.cjs --only resale-backend-prod
             pm2 save
 
